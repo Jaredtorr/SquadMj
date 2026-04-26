@@ -10,21 +10,27 @@ import CreateLobby from "../pages/CreateLobby";
 import CreatePost from "../pages/CreatePost";
 import Notifications from "../pages/Notifications";
 import NotFound from "../pages/NotFound";
+import PrivateRoute from "./PrivateRoute";
 
 const AppRouter = () => (
   <BrowserRouter>
     <Routes>
+      {/* Rutas públicas */}
       <Route path="/" element={<Login />} />
       <Route path="/login" element={<Login />} />
       <Route path="/register" element={<Register />} />
-      <Route path="/home" element={<Home />} />
-      <Route path="/lobbies" element={<LobbyList />} />
-      <Route path="/lobbies/:id" element={<LobbyDetail />} />
-      <Route path="/lobbies/create" element={<CreateLobby />} />
-      <Route path="/profile/:username" element={<Profile />} />
-      <Route path="/profile/edit" element={<EditProfile />} />
-      <Route path="/post/create" element={<CreatePost />} />
-      <Route path="/notifications" element={<Notifications />} />
+
+      {/* Rutas privadas — TODO: activar PrivateRoute cuando haya backend */}
+      {/* Por ahora dejan pasar sin validar token */}
+      <Route path="/home" element={<PrivateRoute><Home /></PrivateRoute>} />
+      <Route path="/lobbies" element={<PrivateRoute><LobbyList /></PrivateRoute>} />
+      <Route path="/lobbies/:id" element={<PrivateRoute><LobbyDetail /></PrivateRoute>} />
+      <Route path="/lobbies/create" element={<PrivateRoute><CreateLobby /></PrivateRoute>} />
+      <Route path="/profile/:username" element={<PrivateRoute><Profile /></PrivateRoute>} />
+      <Route path="/profile/edit" element={<PrivateRoute><EditProfile /></PrivateRoute>} />
+      <Route path="/post/create" element={<PrivateRoute><CreatePost /></PrivateRoute>} />
+      <Route path="/notifications" element={<PrivateRoute><Notifications /></PrivateRoute>} />
+
       <Route path="*" element={<NotFound />} />
     </Routes>
   </BrowserRouter>

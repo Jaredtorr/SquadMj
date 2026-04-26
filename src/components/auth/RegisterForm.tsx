@@ -65,9 +65,10 @@ const RegisterForm = () => {
   };
 
   const handleSubmit = () => {
-    if (!validate()) return;
-    console.log("Register payload:", form);
-  };
+  if (!validate()) return;
+  console.log("Register payload:", form);
+  navigate("/");
+};
 
   const inputClass = (field: keyof FormErrors) =>
     `w-full px-4 py-3 rounded-xl bg-white/5 border text-white placeholder-gray-600 focus:outline-none transition-all ${
