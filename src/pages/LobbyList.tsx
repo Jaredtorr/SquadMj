@@ -1,20 +1,11 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import MainLayout from "../components/layout/MainLayout";
 import LobbyCard from "../components/lobby/LobbyCard";
+import { getAllLobbies, getLobbyStatus } from "../services/lobbyService";
+import type { LobbyData } from "../services/lobbyService";
 
-const allLobbies = [
-  { id: 1, title: "Ranked Squad", description: "Looking for serious players. Mic required.", game: "Valorant", status: "open" as const, members: 3, max: 5, owner: "xSniper99" },
-  { id: 2, title: "Chill Games", description: "Just vibing, no pressure. All ranks welcome.", game: "League of Legends", status: "open" as const, members: 2, max: 5, owner: "ProGamer_Mia" },
-  { id: 3, title: "Pro Team", description: "Competitive team. Diamond+ only. Daily practice.", game: "CS2", status: "full" as const, members: 5, max: 5, owner: "DarkLord_CS" },
-  { id: 4, title: "Weekend Warriors", description: "Casual weekend gaming sessions. Fun over wins.", game: "Fortnite", status: "open" as const, members: 1, max: 4, owner: "NightOwl_G" },
-  { id: 5, title: "Apex Predators", description: "Diamond+ players only. Serious ranked grind.", game: "Apex Legends", status: "open" as const, members: 2, max: 3, owner: "BladeRunner_X" },
-  { id: 6, title: "Silver Scrubs", description: "Chill silver lobby, just having fun.", game: "Valorant", status: "open" as const, members: 3, max: 5, owner: "StellarAim" },
-  { id: 7, title: "Baron Rush", description: "Macro focused team, voice chat required.", game: "League of Legends", status: "full" as const, members: 5, max: 5, owner: "NightOwl_G" },
-  { id: 8, title: "Headshot Kings", description: "FPS enthusiasts. All ranks welcome.", game: "CS2", status: "open" as const, members: 2, max: 5, owner: "xSniper99" },
-];
-
-const games = ["Todos", "Valorant", "CS2", "League of Legends", "Fortnite", "Apex Legends"];
+const games = ["Todos", "Valorant", "CS2", "League of Legends", "Fortnite", "Apex Legends", "Overwatch 2", "Rocket League"];
 
 const gameAccent: Record<string, string> = {
   Valorant: "#ff4655",
@@ -22,6 +13,8 @@ const gameAccent: Record<string, string> = {
   "League of Legends": "#00bcd4",
   Fortnite: "#9c27b0",
   "Apex Legends": "#ff6b35",
+  "Overwatch 2": "#f97316",
+  "Rocket League": "#3b82f6",
 };
 
 const LobbyListPage = () => {
@@ -29,11 +22,22 @@ const LobbyListPage = () => {
   const [search, setSearch] = useState("");
   const [activeGame, setActiveGame] = useState("Todos");
   const [activeStatus, setActiveStatus] = useState("Todos");
+  const [lobbies, setLobbies] = useState<LobbyData[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  const filtered = allLobbies.filter((lobby) => {
+  useEffect(() => {
+    getAllLobbies()
+      .then(setLobbies)
+      .catch((err) => setError(err.message))
+      .finally(() => setLoading(false));
+  }, []);
+
+  const filtered = lobbies.filter((lobby) => {
+    const status = getLobbyStatus(lobby);
     const matchGame = activeGame === "Todos" || lobby.game === activeGame;
-    const matchStatus = activeStatus === "Todos" || (activeStatus === "Abierto" ? lobby.status === "open" : lobby.status === "full");
-    const matchSearch = lobby.title.toLowerCase().includes(search.toLowerCase()) || lobby.game.toLowerCase().includes(search.toLowerCase());
+    const matchStatus = activeStatus === "Todos" || (activeStatus === "Abierto" ? status === "open" : status === "full");
+    const matchSearch = lobby.name.toLowerCase().includes(search.toLowerCase()) || lobby.game.toLowerCase().includes(search.toLowerCase());
     return matchGame && matchStatus && matchSearch;
   });
 
@@ -92,18 +96,18 @@ const LobbyListPage = () => {
               </button>
             ))}
             <div className="ml-auto flex gap-2">
-              {["Todos", "Abierto", "Lleno"].map((status) => (
+              {["Todos", "Abierto", "Lleno"].map((s) => (
                 <button
-                  key={status}
-                  onClick={() => setActiveStatus(status)}
+                  key={s}
+                  onClick={() => setActiveStatus(s)}
                   className="px-3 py-1.5 rounded-xl text-xs font-bold transition-all"
                   style={{
-                    background: activeStatus === status ? 'rgba(255,255,255,0.08)' : 'transparent',
-                    color: activeStatus === status ? '#fff' : '#6b7280',
-                    border: activeStatus === status ? '1px solid rgba(255,255,255,0.12)' : '1px solid transparent',
+                    background: activeStatus === s ? 'rgba(255,255,255,0.08)' : 'transparent',
+                    color: activeStatus === s ? '#fff' : '#6b7280',
+                    border: activeStatus === s ? '1px solid rgba(255,255,255,0.12)' : '1px solid transparent',
                   }}
                 >
-                  {status}
+                  {s}
                 </button>
               ))}
             </div>
@@ -111,7 +115,15 @@ const LobbyListPage = () => {
         </div>
 
         <div className="flex-1 p-6">
-          {filtered.length === 0 ? (
+          {loading ? (
+            <div className="flex items-center justify-center h-64">
+              <p className="text-sm" style={{ color: '#6b7280' }}>Cargando lobbies...</p>
+            </div>
+          ) : error ? (
+            <div className="flex items-center justify-center h-64">
+              <p className="text-sm" style={{ color: '#f87171' }}>{error}</p>
+            </div>
+          ) : filtered.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-64 gap-3">
               <p className="text-lg font-black" style={{ color: '#4b5563' }}>No se encontraron lobbies</p>
               <p className="text-sm" style={{ color: '#4b5563' }}>Intenta con otros filtros o crea uno nuevo</p>

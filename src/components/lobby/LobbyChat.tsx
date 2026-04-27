@@ -1,89 +1,120 @@
 import { useState, useEffect, useRef } from "react";
+import { io, Socket } from "socket.io-client";
+import { getUser } from "../../services/authService";
 
-const userColors: Record<string, string> = {
-  xSniper99: "linear-gradient(135deg, #7c3aed, #4c1d95)",
-  ProGamer_Mia: "linear-gradient(135deg, #0ea5e9, #0284c7)",
-  DarkLord_CS: "linear-gradient(135deg, #f59e0b, #d97706)",
-  Me: "linear-gradient(135deg, #10b981, #059669)",
-};
+const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || "http://localhost:3000";
+const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3000/api";
 
-const getColor = (username: string) => userColors[username] || "linear-gradient(135deg, #7c3aed, #4c1d95)";
+interface Message {
+  id: number;
+  user_id: number;
+  user_name: string;
+  content: string;
+  sentAt: string;
+}
 
-const mockMessages = [
-  { id: 1, username: "xSniper99", content: "¡Hola a todos, listos para jugar?", time: "7:30 PM" },
-  { id: 2, username: "ProGamer_Mia", content: "¡Vamos! Calentando motores 🎮", time: "7:31 PM" },
-  { id: 3, username: "DarkLord_CS", content: "Denme 5 mins, casi estoy listo", time: "7:32 PM" },
+interface Props {
+  lobbyId: number;
+  lobbyName: string;
+  lobbyGame: string;
+}
+
+const avatarColors = [
+  "linear-gradient(135deg, #7c3aed, #4c1d95)",
+  "linear-gradient(135deg, #0ea5e9, #0284c7)",
+  "linear-gradient(135deg, #f59e0b, #d97706)",
+  "linear-gradient(135deg, #10b981, #059669)",
+  "linear-gradient(135deg, #ef4444, #dc2626)",
+  "linear-gradient(135deg, #ec4899, #db2777)",
 ];
 
-const LobbyChat = () => {
-  const [messages, setMessages] = useState(mockMessages);
+const getAvatarColor = (userId: number) => avatarColors[userId % avatarColors.length];
+
+const LobbyChat = ({ lobbyId, lobbyName, lobbyGame }: Props) => {
+  const currentUser = getUser();
+  const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
-  const [isTyping, setIsTyping] = useState(false);
-  const [visible, setVisible] = useState<number[]>([]);
+  const [connected, setConnected] = useState(false);
+  const [visible, setVisible] = useState<Set<number>>(new Set());
+  const socketRef = useRef<Socket | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
-  const typingTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
-    messages.forEach((msg, i) => {
-      setTimeout(() => {
-        setVisible((prev) => [...prev, msg.id]);
-      }, i * 120);
-    });
-  }, []);
+    let socket: Socket;
+
+    const connect = () => {
+      // La cookie HttpOnly access_token viaja automáticamente con withCredentials
+      socket = io(BACKEND_URL, { withCredentials: true });
+      socketRef.current = socket;
+
+      socket.on("connect", () => {
+        setConnected(true);
+        socket.emit("join_lobby", lobbyId);
+      });
+
+      socket.on("disconnect", () => setConnected(false));
+
+      socket.on("message_history", (history: Message[]) => {
+        setMessages(history);
+        history.forEach((msg, i) => {
+          setTimeout(() => {
+            setVisible((prev) => new Set(prev).add(msg.id));
+          }, i * 80);
+        });
+      });
+
+      socket.on("new_message", (msg: Message) => {
+        setMessages((prev) => [...prev, msg]);
+        setTimeout(() => setVisible((prev) => new Set(prev).add(msg.id)), 30);
+      });
+
+      socket.on("error", (err: { message: string }) => {
+        console.error("Socket error:", err.message);
+      });
+    };
+
+    // Refrescar token antes de conectar para que no expire en medio de la sesión
+    fetch(`${API_URL}/auth/refresh`, { method: "POST", credentials: "include" })
+      .finally(() => connect());
+
+    return () => {
+      if (socket) {
+        socket.emit("leave_lobby", lobbyId);
+        socket.disconnect();
+      }
+    };
+  }, [lobbyId]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
   const handleSend = () => {
-    if (!input.trim()) return;
-    const newMsg = {
-      id: Date.now(),
-      username: "Me",
-      content: input.trim(),
-      time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-    };
-    setMessages((prev) => [...prev, newMsg]);
-    setTimeout(() => setVisible((prev) => [...prev, newMsg.id]), 50);
+    if (!input.trim() || !socketRef.current) return;
+    socketRef.current.emit("send_message", { lobby_id: lobbyId, content: input.trim() });
     setInput("");
-
-    // Simulate someone typing back
-    setTimeout(() => setIsTyping(true), 1000);
-    setTimeout(() => {
-      setIsTyping(false);
-      const reply = {
-        id: Date.now() + 1,
-        username: "xSniper99",
-        content: "👍",
-        time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-      };
-      setMessages((prev) => [...prev, reply]);
-      setTimeout(() => setVisible((prev) => [...prev, reply.id]), 50);
-    }, 2500);
-  };
-
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setInput(e.target.value);
-    if (typingTimeout.current) clearTimeout(typingTimeout.current);
-    typingTimeout.current = setTimeout(() => {}, 1000);
   };
 
   return (
     <div className="flex flex-col h-full">
-      {/* Banner */}
+      {/* Header */}
       <div className="px-4 py-3 flex-shrink-0" style={{ background: 'linear-gradient(120deg, #0d0820, #1a0a3a)', borderBottom: '1px solid rgba(124,58,237,0.15)' }}>
         <div className="flex items-center gap-2 mb-1">
-          <div className="w-2 h-2 rounded-full" style={{ background: '#4ade80', boxShadow: '0 0 6px #4ade80' }} />
+          <div className="w-2 h-2 rounded-full" style={{ background: connected ? '#4ade80' : '#6b7280', boxShadow: connected ? '0 0 6px #4ade80' : 'none' }} />
           <span className="text-xs font-bold uppercase tracking-widest" style={{ color: '#a78bfa' }}>Squad Chat</span>
         </div>
-        <p className="text-xs" style={{ color: '#6b7280' }}>Ranked Squad · Valorant</p>
+        <p className="text-xs" style={{ color: '#6b7280' }}>{lobbyName} · {lobbyGame}</p>
       </div>
 
       {/* Messages */}
       <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-3">
+        {messages.length === 0 && connected && (
+          <p className="text-xs text-center mt-8" style={{ color: '#4b5563' }}>Sin mensajes aún. ¡Di algo!</p>
+        )}
+
         {messages.map((msg) => {
-          const isMe = msg.username === "Me";
-          const isVis = visible.includes(msg.id);
+          const isMe = msg.user_id === currentUser?.id;
+          const isVis = visible.has(msg.id);
           return (
             <div
               key={msg.id}
@@ -95,12 +126,19 @@ const LobbyChat = () => {
               }}
             >
               {!isMe && (
-                <div className="w-7 h-7 rounded-full flex-shrink-0 mt-1" style={{ background: getColor(msg.username) }} />
+                <div
+                  className="w-7 h-7 rounded-full flex-shrink-0 mt-1 flex items-center justify-center text-xs font-black text-white"
+                  style={{ background: getAvatarColor(msg.user_id) }}
+                >
+                  {msg.user_name?.charAt(0).toUpperCase()}
+                </div>
               )}
               <div className={`flex flex-col gap-0.5 max-w-[75%] ${isMe ? "items-end" : "items-start"}`}>
-                {!isMe && <span className="text-xs font-semibold" style={{ color: '#6b7280' }}>{msg.username}</span>}
+                {!isMe && (
+                  <span className="text-xs font-semibold" style={{ color: '#6b7280' }}>{msg.user_name}</span>
+                )}
                 <div
-                  className="px-3 py-2 rounded-2xl text-sm"
+                  className="px-3 py-2 text-sm"
                   style={{
                     background: isMe ? 'linear-gradient(135deg, #7c3aed, #4c1d95)' : 'rgba(255,255,255,0.06)',
                     color: isMe ? '#fff' : '#d1d5db',
@@ -109,31 +147,13 @@ const LobbyChat = () => {
                 >
                   {msg.content}
                 </div>
-                <span className="text-xs" style={{ color: '#4b5563' }}>{msg.time}</span>
+                <span className="text-xs" style={{ color: '#4b5563' }}>
+                  {new Date(msg.sentAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                </span>
               </div>
             </div>
           );
         })}
-
-        {/* Typing indicator */}
-        {isTyping && (
-          <div className="flex gap-2 items-center">
-            <div className="w-7 h-7 rounded-full flex-shrink-0" style={{ background: getColor("xSniper99") }} />
-            <div className="px-3 py-2 rounded-2xl flex gap-1 items-center" style={{ background: 'rgba(255,255,255,0.06)' }}>
-              {[0, 1, 2].map((i) => (
-                <div
-                  key={i}
-                  className="w-1.5 h-1.5 rounded-full"
-                  style={{
-                    background: '#6b7280',
-                    animation: 'bounce 1s infinite',
-                    animationDelay: `${i * 0.2}s`,
-                  }}
-                />
-              ))}
-            </div>
-          </div>
-        )}
         <div ref={bottomRef} />
       </div>
 
@@ -142,15 +162,17 @@ const LobbyChat = () => {
         <input
           type="text"
           value={input}
-          onChange={handleInputChange}
+          onChange={(e) => setInput(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && handleSend()}
           placeholder="Escribe un mensaje..."
-          className="flex-1 px-3 py-2 rounded-xl text-sm text-white placeholder-gray-600 focus:outline-none transition-all"
+          disabled={!connected}
+          className="flex-1 px-3 py-2 rounded-xl text-sm text-white placeholder-gray-600 focus:outline-none transition-all disabled:opacity-50"
           style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)' }}
         />
         <button
           onClick={handleSend}
-          className="px-4 py-2 rounded-xl text-sm font-bold transition-all"
+          disabled={!connected || !input.trim()}
+          className="px-4 py-2 rounded-xl text-sm font-bold transition-all disabled:opacity-50"
           style={{ background: 'linear-gradient(135deg, #7c3aed, #4c1d95)', boxShadow: '0 0 12px rgba(124,58,237,0.3)' }}
         >
           Enviar

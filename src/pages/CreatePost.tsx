@@ -1,12 +1,26 @@
 import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import MainLayout from "../components/layout/MainLayout";
+import { getUser, getAvatarUrl } from "../services/authService";
+import { createPost, addPostImage, getPostsByUser } from "../services/postService";
+import type { PostData } from "../services/postService";
 
 const CreatePost = () => {
   const navigate = useNavigate();
+  const currentUser = getUser();
   const [content, setContent] = useState("");
   const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [imageFile, setImageFile] = useState<File | null>(null);
+  const [recentPosts, setRecentPosts] = useState<PostData[]>([]);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+
+  useEffect(() => {
+    if (!currentUser) return;
+    getPostsByUser(currentUser.id)
+      .then((posts) => setRecentPosts(posts.slice(0, 3)))
+      .catch(() => {});
+  }, []);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -75,9 +89,19 @@ const CreatePost = () => {
     return () => { cancelAnimationFrame(animId); window.removeEventListener("resize", handleResize); };
   }, []);
 
-  const handlePost = () => {
+  const handlePost = async () => {
     if (!content.trim()) { setError("El contenido es requerido"); return; }
-    navigate("/home");
+    setLoading(true);
+    setError("");
+    try {
+      const post = await createPost(content.trim());
+      if (imageFile) await addPostImage(post.id, imageFile);
+      navigate("/home");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Error al publicar");
+    } finally {
+      setLoading(false);
+    }
   };
 
   const tips = [
@@ -86,10 +110,14 @@ const CreatePost = () => {
     { icon: "🎮", title: "Horario", tip: "Indica cuándo juegas normalmente" },
   ];
 
-  const recentPosts = [
-    { content: "Looking for a squad for ranked tonight 🎮", likes: 24, time: "2h ago" },
-    { content: "Just hit Diamond in Valorant! 💜", likes: 87, time: "1d ago" },
-  ];
+  const formatTime = (iso: string) => {
+    const diff = Date.now() - new Date(iso).getTime();
+    const mins = Math.floor(diff / 60000);
+    if (mins < 60) return `${mins}m`;
+    const hrs = Math.floor(mins / 60);
+    if (hrs < 24) return `${hrs}h`;
+    return `${Math.floor(hrs / 24)}d`;
+  };
 
   return (
     <MainLayout>
@@ -112,9 +140,15 @@ const CreatePost = () => {
 
           <div className="rounded-2xl p-6 flex flex-col gap-5" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}>
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-full flex-shrink-0" style={{ background: 'linear-gradient(135deg, #7c3aed, #4c1d95)' }} />
+              {getAvatarUrl(currentUser?.profile_picture) ? (
+                <img src={getAvatarUrl(currentUser.profile_picture)!} className="w-10 h-10 rounded-full flex-shrink-0 object-cover" />
+              ) : (
+                <div className="w-10 h-10 rounded-full flex-shrink-0 flex items-center justify-center text-sm font-black text-white" style={{ background: 'linear-gradient(135deg, #7c3aed, #4c1d95)' }}>
+                  {currentUser?.name?.charAt(0).toUpperCase()}
+                </div>
+              )}
               <div>
-                <p className="text-sm font-bold text-white">xSniper99</p>
+                <p className="text-sm font-bold text-white">{currentUser?.name}</p>
                 <p className="text-xs" style={{ color: '#6b7280' }}>Publicando ahora</p>
               </div>
             </div>
@@ -139,7 +173,7 @@ const CreatePost = () => {
                 className="hidden"
                 onChange={(e) => {
                   const file = e.target.files?.[0];
-                  if (file) console.log("Imagen seleccionada:", file.name);
+                  if (file) setImageFile(file);
                 }}
               />
               <label
@@ -155,8 +189,13 @@ const CreatePost = () => {
               <span className="text-xs" style={{ color: '#4b5563' }}>PNG, JPG hasta 5MB</span>
             </div>
 
-            <button onClick={handlePost} className="w-full py-3 rounded-xl font-bold text-sm tracking-widest uppercase" style={{ background: 'linear-gradient(135deg, #7c3aed, #4c1d95)', boxShadow: '0 0 20px rgba(124,58,237,0.3)' }}>
-              Publicar
+            <button
+              onClick={handlePost}
+              disabled={loading}
+              className="w-full py-3 rounded-xl font-bold text-sm tracking-widest uppercase disabled:opacity-50 transition-all"
+              style={{ background: 'linear-gradient(135deg, #7c3aed, #4c1d95)', boxShadow: '0 0 20px rgba(124,58,237,0.3)' }}
+            >
+              {loading ? "Publicando..." : "Publicar"}
             </button>
           </div>
         </div>
@@ -245,7 +284,7 @@ const CreatePost = () => {
             </div>
 
             <div className="grid grid-cols-3 gap-3">
-              {[{ label: "Posts", value: "12", color: '#a78bfa' }, { label: "Alcance", value: "1.2K", color: '#60a5fa' }, { label: "Likes", value: "348", color: '#f472b6' }].map((stat) => (
+              {[{ label: "Posts", value: String(recentPosts.length || 0), color: '#a78bfa' }, { label: "Alcance", value: "—", color: '#60a5fa' }, { label: "Likes", value: "—", color: '#f472b6' }].map((stat) => (
                 <div
                   key={stat.label}
                   className="rounded-xl p-3 text-center relative overflow-hidden cursor-pointer transition-all duration-300"
@@ -295,18 +334,19 @@ const CreatePost = () => {
 
             <div>
               <p className="text-xs font-bold uppercase tracking-widest mb-3" style={{ color: '#6b7280' }}>Tus posts recientes</p>
-              <div className="flex flex-col gap-2">
-                {recentPosts.map((post, i) => (
-                  <div key={i} className="p-4 rounded-xl relative overflow-hidden" style={{ background: 'rgba(0,0,0,0.25)', border: '1px solid rgba(124,58,237,0.15)' }}>
-                    <div className="absolute top-0 left-0 right-0 h-0.5" style={{ background: 'linear-gradient(90deg, transparent, rgba(167,139,250,0.5), transparent)' }} />
-                    <p className="text-sm font-medium mb-3 line-clamp-1" style={{ color: '#e5e7eb' }}>{post.content}</p>
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs px-2 py-0.5 rounded-full" style={{ background: 'rgba(124,58,237,0.15)', color: '#a78bfa' }}>{post.time}</span>
-                      <span className="text-xs font-bold" style={{ color: '#f472b6', textShadow: '0 0 8px #f472b6' }}>♥ {post.likes}</span>
+              {recentPosts.length === 0 ? (
+                <p className="text-xs" style={{ color: '#4b5563' }}>Aún no tienes publicaciones.</p>
+              ) : (
+                <div className="flex flex-col gap-2">
+                  {recentPosts.map((post) => (
+                    <div key={post.id} className="p-4 rounded-xl relative overflow-hidden" style={{ background: 'rgba(0,0,0,0.25)', border: '1px solid rgba(124,58,237,0.15)' }}>
+                      <div className="absolute top-0 left-0 right-0 h-0.5" style={{ background: 'linear-gradient(90deg, transparent, rgba(167,139,250,0.5), transparent)' }} />
+                      <p className="text-sm font-medium mb-3 line-clamp-1" style={{ color: '#e5e7eb' }}>{post.description}</p>
+                      <span className="text-xs px-2 py-0.5 rounded-full" style={{ background: 'rgba(124,58,237,0.15)', color: '#a78bfa' }}>{formatTime(post.createdAt)}</span>
                     </div>
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         </div>

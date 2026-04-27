@@ -1,25 +1,86 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import MainLayout from "../components/layout/MainLayout";
+import { getUser, getAvatarUrl, updateProfile, deleteAccount, logout } from "../services/authService";
+import type { UserData } from "../services/authService";
 
 const EditProfile = () => {
   const navigate = useNavigate();
-  const [username, setUsername] = useState("xSniper99");
-  const [bio, setBio] = useState("Gamer competitivo. Diamante en Valorant. Siempre buscando un buen squad 💜");
-  const [email, setEmail] = useState("sniper@squadup.gg");
+  const [user, setUser] = useState<UserData | null>(null);
+  const [username, setUsername] = useState("");
+  const [email, setEmail] = useState("");
   const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
+  const [avatarFile, setAvatarFile] = useState<File | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
-  const handleSave = () => {
-    console.log("Save:", { username, bio, email });
-    navigate("/profile/me");
+  useEffect(() => {
+    const stored = getUser();
+    if (!stored) { navigate("/login", { replace: true }); return; }
+    setUser(stored);
+    setUsername(stored.name);
+    setEmail(stored.email);
+    const avatar = getAvatarUrl(stored.profile_picture);
+    if (avatar) setAvatarPreview(avatar);
+  }, []);
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setAvatarFile(file);
+      setAvatarPreview(URL.createObjectURL(file));
+    }
+  };
+
+  const handleSave = async () => {
+    if (!user) return;
+    if (!username.trim() || !email.trim()) {
+      setError("Nombre y correo son obligatorios.");
+      return;
+    }
+    setError(null);
+    setSuccess(false);
+    setLoading(true);
+    try {
+      const formData = new FormData();
+      formData.append("name", username.trim());
+      formData.append("email", email.trim());
+      if (avatarFile) formData.append("profile_picture", avatarFile);
+      const updated = await updateProfile(user.id, formData);
+      setUser(updated);
+      setSuccess(true);
+      setTimeout(() => navigate(`/profile/${updated.name}`), 1000);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Error al guardar");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!user) return;
+    setDeleting(true);
+    try {
+      await deleteAccount(user.id);
+      await logout();
+      navigate("/login", { replace: true });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Error al eliminar cuenta");
+      setShowDeleteConfirm(false);
+    } finally {
+      setDeleting(false);
+    }
   };
 
   return (
     <MainLayout>
       <div className="flex flex-1 relative" style={{ minHeight: '100vh' }}>
         <div className="flex-1 flex flex-col justify-center px-12 py-8 relative z-10" style={{ maxWidth: '520px' }}>
-          <button onClick={() => navigate("/profile/me")} className="flex items-center gap-1.5 text-xs mb-6 w-fit" style={{ color: '#6b7280' }}>
+          <button onClick={() => navigate(`/profile/${user?.name ?? "me"}`)} className="flex items-center gap-1.5 text-xs mb-6 w-fit" style={{ color: '#6b7280' }}>
             <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
             </svg>
@@ -35,6 +96,7 @@ const EditProfile = () => {
           </h1>
 
           <div className="rounded-2xl p-6 flex flex-col gap-5" style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}>
+            {/* Avatar */}
             <div className="flex items-center gap-4">
               <div
                 className="w-20 h-20 rounded-2xl flex-shrink-0 overflow-hidden cursor-pointer"
@@ -43,16 +105,7 @@ const EditProfile = () => {
               >
                 {avatarPreview && <img src={avatarPreview} alt="avatar" className="w-full h-full object-cover" />}
               </div>
-              <input
-                ref={fileRef}
-                type="file"
-                accept="image/*"
-                className="hidden"
-                onChange={(e) => {
-                  const file = e.target.files?.[0];
-                  if (file) setAvatarPreview(URL.createObjectURL(file));
-                }}
-              />
+              <input ref={fileRef} type="file" accept="image/png,image/jpeg,image/webp" className="hidden" onChange={handleFileChange} />
               <div>
                 <button
                   onClick={() => fileRef.current?.click()}
@@ -61,10 +114,11 @@ const EditProfile = () => {
                 >
                   Cambiar avatar
                 </button>
-                <p className="text-xs" style={{ color: '#4b5563' }}>PNG, JPG hasta 5MB</p>
+                <p className="text-xs" style={{ color: '#4b5563' }}>PNG, JPG, WEBP hasta 5MB</p>
               </div>
             </div>
 
+            {/* Username */}
             <div>
               <label className="text-xs font-bold uppercase tracking-widest mb-2 block" style={{ color: '#6b7280', fontFamily: 'Orbitron, sans-serif' }}>Nombre de usuario</label>
               <input
@@ -76,6 +130,7 @@ const EditProfile = () => {
               />
             </div>
 
+            {/* Email */}
             <div>
               <label className="text-xs font-bold uppercase tracking-widest mb-2 block" style={{ color: '#6b7280', fontFamily: 'Orbitron, sans-serif' }}>Correo electrónico</label>
               <input
@@ -87,28 +142,59 @@ const EditProfile = () => {
               />
             </div>
 
-            <div>
-              <label className="text-xs font-bold uppercase tracking-widest mb-2 block" style={{ color: '#6b7280', fontFamily: 'Orbitron, sans-serif' }}>Biografía</label>
-              <textarea
-                value={bio}
-                onChange={(e) => setBio(e.target.value)}
-                rows={3}
-                className="w-full px-4 py-3 rounded-xl text-sm text-white focus:outline-none resize-none transition-all"
-                style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(124,58,237,0.25)' }}
-              />
-              <p className="text-xs mt-1 text-right" style={{ color: '#4b5563' }}>{bio.length}/160</p>
-            </div>
+            {error && (
+              <p className="text-pink-400 text-xs text-center py-2 px-3 rounded-lg bg-pink-500/10 border border-pink-500/20">{error}</p>
+            )}
+            {success && (
+              <p className="text-green-400 text-xs text-center py-2 px-3 rounded-lg bg-green-500/10 border border-green-500/20">Perfil actualizado correctamente</p>
+            )}
 
             <button
               onClick={handleSave}
-              className="w-full py-3 rounded-xl font-bold text-sm tracking-widest uppercase transition-all"
+              disabled={loading}
+              className="w-full py-3 rounded-xl font-bold text-sm tracking-widest uppercase transition-all disabled:opacity-50 disabled:cursor-not-allowed"
               style={{ background: 'linear-gradient(135deg, #7c3aed, #4c1d95)', boxShadow: '0 0 20px rgba(124,58,237,0.3)', fontFamily: 'Orbitron, sans-serif' }}
             >
-              Guardar cambios
+              {loading ? "Guardando..." : "Guardar cambios"}
             </button>
+          </div>
+
+          {/* Delete account */}
+          <div className="mt-6 rounded-2xl p-5" style={{ border: '1px solid rgba(239,68,68,0.2)', background: 'rgba(239,68,68,0.04)' }}>
+            <p className="text-xs font-bold uppercase tracking-widest mb-1" style={{ color: '#ef4444', fontFamily: 'Orbitron, sans-serif' }}>Zona de peligro</p>
+            <p className="text-xs mb-4" style={{ color: '#6b7280' }}>Esta acción es permanente y no se puede deshacer.</p>
+
+            {!showDeleteConfirm ? (
+              <button
+                onClick={() => setShowDeleteConfirm(true)}
+                className="w-full py-2.5 rounded-xl font-bold text-xs tracking-widest uppercase transition-all"
+                style={{ border: '1px solid rgba(239,68,68,0.3)', color: '#ef4444', background: 'transparent', fontFamily: 'Orbitron, sans-serif' }}
+              >
+                Eliminar mi cuenta
+              </button>
+            ) : (
+              <div className="flex gap-3">
+                <button
+                  onClick={handleDelete}
+                  disabled={deleting}
+                  className="flex-1 py-2.5 rounded-xl font-bold text-xs tracking-widest uppercase transition-all disabled:opacity-50"
+                  style={{ background: '#ef4444', color: 'white', fontFamily: 'Orbitron, sans-serif' }}
+                >
+                  {deleting ? "Eliminando..." : "Confirmar"}
+                </button>
+                <button
+                  onClick={() => setShowDeleteConfirm(false)}
+                  className="flex-1 py-2.5 rounded-xl font-bold text-xs tracking-widest uppercase transition-all"
+                  style={{ border: '1px solid rgba(255,255,255,0.1)', color: '#6b7280', background: 'transparent', fontFamily: 'Orbitron, sans-serif' }}
+                >
+                  Cancelar
+                </button>
+              </div>
+            )}
           </div>
         </div>
 
+        {/* Panel derecho decorativo — igual que antes */}
         <div
           className="relative flex-1 overflow-hidden flex flex-col"
           style={{
@@ -117,101 +203,6 @@ const EditProfile = () => {
           }}
         >
           <div className="absolute inset-0 pointer-events-none" style={{ background: 'radial-gradient(ellipse at 50% 80%, rgba(124,58,237,0.2) 0%, transparent 60%)', zIndex: 1 }} />
-          <div className="absolute bottom-[-100px] right-[-100px] w-[400px] h-[400px] rounded-full" style={{ border: '1px solid rgba(168,85,247,0.15)' }} />
-          <div className="absolute top-[-60px] right-[-60px] w-[250px] h-[250px] rounded-full" style={{ border: '1px solid rgba(168,85,247,0.08)' }} />
-
-          <div className="absolute inset-0 overflow-hidden" style={{ zIndex: 2 }}>
-            <div className="absolute bottom-0 left-0 right-0 h-1" style={{ background: 'rgba(124,58,237,0.3)' }} />
-
-            <div className="absolute" style={{ bottom: '1px', right: '40px' }}>
-              <svg width="72" height="72" viewBox="0 0 32 32" style={{ imageRendering: 'pixelated' }}>
-                <polygon points="2,14 16,2 30,14" fill="#7c3aed" />
-                <polygon points="4,14 16,4 28,14" fill="#9333ea" />
-                <rect x="4" y="14" width="24" height="16" fill="#4c1d95" />
-                <rect x="5" y="15" width="22" height="14" fill="#6d28d9" />
-                <rect x="12" y="22" width="8" height="8" fill="#2e1065" />
-                <rect x="13" y="23" width="6" height="7" fill="#1e0a4a" />
-                <rect x="6" y="17" width="5" height="5" fill="#60a5fa" />
-                <rect x="7" y="18" width="3" height="3" fill="#93c5fd" />
-                <rect x="21" y="17" width="5" height="5" fill="#60a5fa" />
-                <rect x="22" y="18" width="3" height="3" fill="#93c5fd" />
-                <rect x="20" y="4" width="4" height="6" fill="#4c1d95" />
-                <rect x="21" y="2" width="2" height="3" fill="#374151" />
-                <rect x="21" y="0" width="2" height="2" fill="#9ca3af" style={{ animation: 'smokePuff 1.2s steps(2) infinite' }} />
-              </svg>
-            </div>
-
-            <div className="absolute" style={{ bottom: '1px', right: '118px', animation: 'plantFlag 9s linear infinite' }}>
-              <svg width="20" height="36" viewBox="0 0 10 18" style={{ imageRendering: 'pixelated' }}>
-                <rect x="4" y="0" width="1" height="14" fill="#c4b5fd" />
-                <rect x="5" y="1" width="4" height="4" fill="#7c3aed" />
-                <rect x="5" y="1" width="4" height="2" fill="#a78bfa" />
-                <rect x="3" y="13" width="4" height="2" fill="#4c1d95" />
-              </svg>
-            </div>
-
-            <div className="absolute" style={{ bottom: '1px', animation: 'phase1Walk 9s linear infinite' }}>
-              <svg width="36" height="56" viewBox="0 0 18 28" style={{ imageRendering: 'pixelated' }}>
-                <rect x="12" y="0" width="1" height="12" fill="#c4b5fd" />
-                <rect x="13" y="1" width="4" height="4" fill="#7c3aed" />
-                <rect x="13" y="1" width="4" height="2" fill="#a78bfa" />
-                <rect x="5" y="12" width="6" height="6" fill="#fcd34d" />
-                <rect x="6" y="14" width="1" height="1" fill="#0d0820" />
-                <rect x="9" y="14" width="1" height="1" fill="#0d0820" />
-                <rect x="7" y="16" width="2" height="1" fill="#d97706" />
-                <rect x="4" y="18" width="8" height="6" fill="#7c3aed" />
-                <rect x="5" y="19" width="6" height="4" fill="#6d28d9" />
-                <rect x="11" y="18" width="2" height="3" fill="#7c3aed" />
-                <rect x="2" y="19" width="2" height="3" fill="#7c3aed" />
-                <rect x="5" y="24" width="2" height="4" fill="#4c1d95" style={{ animation: 'legWalkL 0.35s steps(2) infinite' }} />
-                <rect x="9" y="24" width="2" height="4" fill="#4c1d95" style={{ animation: 'legWalkR 0.35s steps(2) infinite' }} />
-                <rect x="4" y="27" width="3" height="2" fill="#2e1065" />
-                <rect x="9" y="27" width="3" height="2" fill="#2e1065" />
-              </svg>
-            </div>
-
-            <div className="absolute" style={{ bottom: '1px', right: '105px', animation: 'phase2Plant 9s linear infinite' }}>
-              <svg width="36" height="56" viewBox="0 0 18 28" style={{ imageRendering: 'pixelated' }}>
-                <rect x="5" y="4" width="6" height="6" fill="#fcd34d" />
-                <rect x="6" y="6" width="1" height="1" fill="#0d0820" />
-                <rect x="9" y="6" width="1" height="1" fill="#0d0820" />
-                <rect x="7" y="8" width="2" height="1" fill="#d97706" />
-                <rect x="4" y="10" width="8" height="6" fill="#7c3aed" />
-                <rect x="5" y="11" width="6" height="4" fill="#6d28d9" />
-                <rect x="1" y="8" width="3" height="5" fill="#7c3aed" />
-                <rect x="12" y="8" width="3" height="5" fill="#7c3aed" />
-                <rect x="0" y="6" width="3" height="3" fill="#fcd34d" />
-                <rect x="13" y="6" width="3" height="3" fill="#fcd34d" />
-                <rect x="5" y="16" width="2" height="6" fill="#4c1d95" />
-                <rect x="9" y="16" width="2" height="6" fill="#4c1d95" />
-                <rect x="4" y="21" width="3" height="2" fill="#2e1065" />
-                <rect x="9" y="21" width="3" height="2" fill="#2e1065" />
-                <rect x="7" y="0" width="2" height="2" fill="#fcd34d" style={{ animation: 'hammerHit 0.2s steps(2) infinite' }} />
-                <rect x="4" y="1" width="2" height="2" fill="#f59e0b" style={{ animation: 'hammerHit 0.2s steps(2) infinite alternate' }} />
-                <rect x="10" y="1" width="2" height="2" fill="#f59e0b" style={{ animation: 'hammerHit 0.2s steps(2) infinite' }} />
-              </svg>
-            </div>
-
-            <div className="absolute" style={{ bottom: '1px', right: '55px', animation: 'phase3Enter 9s linear infinite' }}>
-              <svg width="36" height="56" viewBox="0 0 18 28" style={{ imageRendering: 'pixelated' }}>
-                <rect x="5" y="8" width="6" height="6" fill="#fcd34d" />
-                <rect x="6" y="10" width="1" height="1" fill="#0d0820" />
-                <rect x="9" y="10" width="1" height="1" fill="#0d0820" />
-                <rect x="4" y="14" width="8" height="6" fill="#7c3aed" />
-                <rect x="2" y="15" width="2" height="3" fill="#7c3aed" />
-                <rect x="12" y="15" width="2" height="3" fill="#7c3aed" />
-                <rect x="5" y="20" width="2" height="4" fill="#4c1d95" />
-                <rect x="9" y="20" width="2" height="4" fill="#4c1d95" />
-              </svg>
-            </div>
-
-            <div className="absolute" style={{ bottom: '18px', animation: 'bulletRight 4s linear infinite', animationDelay: '1s' }}>
-              <svg width="10" height="10" viewBox="0 0 5 5" style={{ imageRendering: 'pixelated' }}>
-                <rect x="2" y="0" width="1" height="5" fill="#fcd34d" />
-                <rect x="0" y="2" width="5" height="1" fill="#fcd34d" />
-              </svg>
-            </div>
-          </div>
 
           <div className="relative z-10 pt-8 pr-8 pb-8 pl-16 flex flex-col gap-6">
             <div>
@@ -224,7 +215,7 @@ const EditProfile = () => {
 
             <div className="rounded-2xl p-5" style={{ background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(124,58,237,0.2)' }}>
               <p className="text-xs font-bold uppercase tracking-widest mb-3" style={{ color: '#6b7280', fontFamily: 'Orbitron, sans-serif' }}>Preview</p>
-              <div className="flex items-center gap-3 mb-3">
+              <div className="flex items-center gap-3">
                 <div className="w-12 h-12 rounded-xl flex-shrink-0 overflow-hidden" style={{ background: avatarPreview ? 'transparent' : 'linear-gradient(135deg, #7c3aed, #4c1d95)', boxShadow: '0 0 12px rgba(124,58,237,0.4)' }}>
                   {avatarPreview && <img src={avatarPreview} alt="avatar" className="w-full h-full object-cover" />}
                 </div>
@@ -233,7 +224,6 @@ const EditProfile = () => {
                   <p className="text-xs" style={{ color: '#6b7280' }}>{email || "tu@email.com"}</p>
                 </div>
               </div>
-              <p className="text-xs leading-relaxed" style={{ color: '#9ca3af' }}>{bio || "Tu biografía aparecerá aquí..."}</p>
             </div>
 
             <div>
@@ -258,48 +248,6 @@ const EditProfile = () => {
           </div>
         </div>
       </div>
-
-      <style>{`
-        @keyframes phase1Walk {
-          0%   { left: -50px; opacity: 1; }
-          50%  { left: calc(100% - 130px); opacity: 1; }
-          55%  { left: calc(100% - 130px); opacity: 0; }
-          100% { left: calc(100% - 130px); opacity: 0; }
-        }
-        @keyframes phase2Plant {
-          0%, 50%  { opacity: 0; }
-          55%, 70% { opacity: 1; }
-          75%      { opacity: 0; }
-          100%     { opacity: 0; }
-        }
-        @keyframes phase3Enter {
-          0%, 70%  { opacity: 0; transform: scaleX(1); }
-          75%      { opacity: 1; transform: scaleX(1); }
-          88%      { opacity: 1; transform: scaleX(0.3); }
-          92%, 100%{ opacity: 0; transform: scaleX(0); }
-        }
-        @keyframes plantFlag {
-          0%, 60%  { opacity: 0; }
-          65%, 100%{ opacity: 1; }
-        }
-        @keyframes smokePuff {
-          0%   { transform: translateY(0); opacity: 1; }
-          100% { transform: translateY(-4px); opacity: 0; }
-        }
-        @keyframes hammerHit {
-          0%   { transform: translate(0,0); }
-          100% { transform: translate(2px, -2px); }
-        }
-        @keyframes legWalkL {
-          0%   { transform: translateY(0); }
-          100% { transform: translateY(3px); }
-        }
-        @keyframes legWalkR {
-          0%   { transform: translateY(3px); }
-          100% { transform: translateY(0); }
-        }
-        @keyframes bulletRight { from { left: -20px; } to { left: 100%; } }
-      `}</style>
     </MainLayout>
   );
 };

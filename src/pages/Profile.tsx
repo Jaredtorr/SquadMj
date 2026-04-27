@@ -1,29 +1,11 @@
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import MainLayout from "../components/layout/MainLayout";
 import PostCard from "../components/feed/PostCard";
-
-const mockUser = {
-  id: 1,
-  username: "xSniper99",
-  email: "sniper@squadup.gg",
-  bio: "Competitive gamer. Valorant Diamond. Always looking for a good squad 💜",
-  avatar_url: "",
-  created_at: "2024-01-01",
-  game: "Valorant",
-  rank: "Diamond",
-};
-
-const mockPosts = [
-  { id: 1, username: "xSniper99", time: "2h ago", content: "Looking for a squad for ranked tonight 🎮 Need a support main, mic required.", likes: 24, comments: 5 },
-  { id: 2, username: "xSniper99", time: "1d ago", content: "Just hit Diamond in Valorant after 3 months of grind 💜", likes: 87, comments: 12 },
-  { id: 3, username: "xSniper99", time: "3d ago", content: "New lobby open for CS2 competitive. Serious players only, mic required.", likes: 15, comments: 3 },
-];
-
-const stats = [
-  { label: "Publicaciones", value: "12", color: "#a78bfa" },
-  { label: "Lobbies", value: "5", color: "#60a5fa" },
-  { label: "Amigos", value: "38", color: "#f472b6" },
-];
+import { getUser, getAvatarUrl } from "../services/authService";
+import type { UserData } from "../services/authService";
+import { getPostsByUser } from "../services/postService";
+import type { PostData } from "../services/postService";
 
 const ShooterCanvas = ({ color, delay = 0 }: { color: string; delay?: number }) => (
   <div className="absolute inset-0 overflow-hidden pointer-events-none" style={{ zIndex: 3 }}>
@@ -102,6 +84,21 @@ const ShooterCanvas = ({ color, delay = 0 }: { color: string; delay?: number }) 
 
 const Profile = () => {
   const navigate = useNavigate();
+  const [user, setUser] = useState<UserData | null>(null);
+  const [posts, setPosts] = useState<PostData[]>([]);
+
+  useEffect(() => {
+    const stored = getUser();
+    if (!stored) { navigate("/login", { replace: true }); return; }
+    setUser(stored);
+    getPostsByUser(stored.id).then(setPosts).catch(() => {});
+  }, []);
+
+  const stats = [
+    { label: "Publicaciones", value: String(posts.length), color: "#a78bfa" },
+    { label: "Lobbies", value: "—", color: "#60a5fa" },
+    { label: "Amigos", value: "—", color: "#f472b6" },
+  ];
 
   return (
     <MainLayout>
@@ -114,22 +111,22 @@ const Profile = () => {
 
           <div className="relative z-10 px-10 py-8 flex items-end gap-6">
             <div className="relative flex-shrink-0">
-              <div className="w-28 h-28 rounded-2xl" style={{ background: 'linear-gradient(135deg, #7c3aed, #4c1d95)', boxShadow: '0 0 30px rgba(124,58,237,0.6), 0 0 60px rgba(124,58,237,0.2)' }} />
+              <div className="w-28 h-28 rounded-2xl overflow-hidden" style={{ background: 'linear-gradient(135deg, #7c3aed, #4c1d95)', boxShadow: '0 0 30px rgba(124,58,237,0.6), 0 0 60px rgba(124,58,237,0.2)' }}>
+                {user && getAvatarUrl(user.profile_picture) && (
+                  <img src={getAvatarUrl(user.profile_picture)!} alt="avatar" className="w-full h-full object-cover" />
+                )}
+              </div>
               <div className="absolute bottom-1 right-1 w-4 h-4 rounded-full" style={{ background: '#4ade80', border: '2px solid #0d0820', boxShadow: '0 0 8px #4ade80' }} />
             </div>
 
             <div className="flex-1 pb-2">
               <div className="flex items-center gap-3 mb-1">
-                <h1 className="text-3xl font-black text-white">{mockUser.username}</h1>
-                <span className="text-xs px-2 py-0.5 rounded-full font-bold" style={{ background: 'rgba(124,58,237,0.2)', color: '#a78bfa', border: '1px solid rgba(124,58,237,0.3)' }}>
-                  {mockUser.rank}
-                </span>
-                <span className="text-xs px-2 py-0.5 rounded-full font-bold" style={{ background: 'rgba(255,70,85,0.15)', color: '#ff4655', border: '1px solid rgba(255,70,85,0.3)' }}>
-                  {mockUser.game}
-                </span>
+                <h1 className="text-3xl font-black text-white">{user?.name ?? "—"}</h1>
               </div>
-              <p className="text-sm mb-2" style={{ color: '#9ca3af' }}>{mockUser.bio}</p>
-              <p className="text-xs" style={{ color: '#4b5563' }}>Se unió el {new Date(mockUser.created_at).toLocaleDateString('es-MX', { year: 'numeric', month: 'long', day: 'numeric' })}</p>
+              <p className="text-sm mb-2" style={{ color: '#9ca3af' }}>{user?.email}</p>
+              <p className="text-xs" style={{ color: '#4b5563' }}>
+                {user?.createdAt ? `Se unió el ${new Date(user.createdAt).toLocaleDateString('es-MX', { year: 'numeric', month: 'long', day: 'numeric' })}` : ""}
+              </p>
             </div>
 
             <button
@@ -176,7 +173,10 @@ const Profile = () => {
           <div className="flex-1 px-10 py-6 max-w-3xl">
             <p className="text-xs font-bold uppercase tracking-widest mb-4" style={{ color: '#6b7280', fontFamily: 'Orbitron, sans-serif' }}>Publicaciones</p>
             <div className="flex flex-col gap-3">
-              {mockPosts.map((post) => (
+              {posts.length === 0 && (
+                <p className="text-sm" style={{ color: '#4b5563' }}>Sin publicaciones aún.</p>
+              )}
+              {posts.map((post) => (
                 <PostCard key={post.id} post={post} />
               ))}
             </div>

@@ -5,11 +5,8 @@ interface Props {
 }
 
 const PrivateRoute = ({ children }: Props) => {
-  // TODO: cuando haya backend, descomentar esto:
-  // const token = localStorage.getItem("token");
-  // if (!token) return <Navigate to="/" replace />;
-  
-  // Por ahora deja pasar siempre
+  const user = localStorage.getItem("user");
+  if (!user) return <Navigate to="/login" replace />;
   return <>{children}</>;
 };
 

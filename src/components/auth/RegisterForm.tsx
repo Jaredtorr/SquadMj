@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { register } from "../../services/authService";
 
 interface FormData {
   username: string;
@@ -24,6 +25,8 @@ const RegisterForm = () => {
     confirm: "",
   });
   const [errors, setErrors] = useState<FormErrors>({});
+  const [apiError, setApiError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
 
   const validate = (): boolean => {
     const newErrors: FormErrors = {};
@@ -64,11 +67,19 @@ const RegisterForm = () => {
     }
   };
 
-  const handleSubmit = () => {
-  if (!validate()) return;
-  console.log("Register payload:", form);
-  navigate("/");
-};
+  const handleSubmit = async () => {
+    if (!validate()) return;
+    setApiError(null);
+    setLoading(true);
+    try {
+      await register({ username: form.username, email: form.email, password: form.password });
+      navigate("/login");
+    } catch (err) {
+      setApiError(err instanceof Error ? err.message : "Error al registrar");
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const inputClass = (field: keyof FormErrors) =>
     `w-full px-4 py-3 rounded-xl bg-white/5 border text-white placeholder-gray-600 focus:outline-none transition-all ${
@@ -196,11 +207,18 @@ const RegisterForm = () => {
             )}
           </div>
 
+          {apiError && (
+            <p className="text-pink-400 text-xs text-center py-2 px-3 rounded-lg bg-pink-500/10 border border-pink-500/20">
+              {apiError}
+            </p>
+          )}
+
           <button
             onClick={handleSubmit}
-            className="w-full py-3 rounded-xl font-bold text-sm tracking-widest uppercase bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-500 hover:to-blue-500 transition-all shadow-lg shadow-purple-900/40 mt-2"
+            disabled={loading}
+            className="w-full py-3 rounded-xl font-bold text-sm tracking-widest uppercase bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-500 hover:to-blue-500 transition-all shadow-lg shadow-purple-900/40 mt-2 disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            Crear cuenta
+            {loading ? "Creando cuenta..." : "Crear cuenta"}
           </button>
         </div>
 

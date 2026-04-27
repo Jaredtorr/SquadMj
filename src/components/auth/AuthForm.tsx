@@ -1,10 +1,34 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { login } from "../../services/authService";
 
 const AuthForm = () => {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
+
+  const handleSubmit = async () => {
+    if (!email.trim() || !password.trim()) {
+      setError("Por favor completa todos los campos.");
+      return;
+    }
+    setError(null);
+    setLoading(true);
+    try {
+      await login({ email, password });
+      navigate("/home");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Error al iniciar sesión");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter") handleSubmit();
+  };
 
   return (
     <div className="w-full md:w-1/2 flex items-center justify-center px-10 relative z-10">
@@ -26,17 +50,46 @@ const AuthForm = () => {
         <div className="space-y-4">
           <div>
             <label className="text-xs text-gray-400 uppercase tracking-widest mb-1 block">Correo electrónico</label>
-            <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="tu@squadup.gg" className="w-full px-4 py-3 rounded-xl bg-white/5 border border-white/10 text-white placeholder-gray-600 focus:outline-none focus:border-purple-500 focus:bg-white/10 transition-all" />
+            <input
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              onKeyDown={handleKeyDown}
+              placeholder="tu@squadup.gg"
+              className="w-full px-4 py-3 rounded-xl bg-white/5 border border-white/10 text-white placeholder-gray-600 focus:outline-none focus:border-purple-500 focus:bg-white/10 transition-all"
+            />
           </div>
           <div>
             <label className="text-xs text-gray-400 uppercase tracking-widest mb-1 block">Contraseña</label>
-            <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" className="w-full px-4 py-3 rounded-xl bg-white/5 border border-white/10 text-white placeholder-gray-600 focus:outline-none focus:border-purple-500 focus:bg-white/10 transition-all" />
+            <input
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              onKeyDown={handleKeyDown}
+              placeholder="••••••••"
+              className="w-full px-4 py-3 rounded-xl bg-white/5 border border-white/10 text-white placeholder-gray-600 focus:outline-none focus:border-purple-500 focus:bg-white/10 transition-all"
+            />
           </div>
           <div className="flex justify-end">
             <span className="text-xs text-purple-400 cursor-pointer hover:text-purple-300 transition">¿Olvidaste tu contraseña?</span>
           </div>
-          <button className="w-full py-3 rounded-xl font-bold text-sm tracking-widest uppercase bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-500 hover:to-blue-500 transition-all shadow-lg shadow-purple-900/40">Iniciar sesión</button>
-          <button className="w-full py-3 rounded-xl font-bold text-sm tracking-widest uppercase border border-white/10 bg-white/5 hover:bg-white/10 transition-all text-gray-400">Jugar como invitado</button>
+
+          {error && (
+            <p className="text-pink-400 text-xs text-center py-2 px-3 rounded-lg bg-pink-500/10 border border-pink-500/20">
+              {error}
+            </p>
+          )}
+
+          <button
+            onClick={handleSubmit}
+            disabled={loading}
+            className="w-full py-3 rounded-xl font-bold text-sm tracking-widest uppercase bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-500 hover:to-blue-500 transition-all shadow-lg shadow-purple-900/40 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {loading ? "Iniciando sesión..." : "Iniciar sesión"}
+          </button>
+          <button className="w-full py-3 rounded-xl font-bold text-sm tracking-widest uppercase border border-white/10 bg-white/5 hover:bg-white/10 transition-all text-gray-400">
+            Jugar como invitado
+          </button>
         </div>
         <p className="mt-8 text-gray-500 text-sm text-center">
           ¿No tienes una cuenta?{" "}

@@ -1,6 +1,7 @@
-import { useState } from "react";
+import { useState, type ChangeEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import MainLayout from "../components/layout/MainLayout";
+import { createLobby } from "../services/lobbyService";
 
 const games = ["Valorant", "League of Legends", "CS2", "Fortnite", "Apex Legends", "Overwatch 2", "Rocket League"];
 
@@ -26,7 +27,23 @@ const CreateLobby = () => {
   const [description, setDescription] = useState("");
   const [game, setGame] = useState("");
   const [maxMembers, setMaxMembers] = useState(5);
+  const [imageFile, setImageFile] = useState<File | null>(null);
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [loading, setLoading] = useState(false);
+  const [apiError, setApiError] = useState<string | null>(null);
+
+  const handleImageChange = (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0] ?? null;
+    setImageFile(file);
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = (ev) => setImagePreview(ev.target?.result as string);
+      reader.readAsDataURL(file);
+    } else {
+      setImagePreview(null);
+    }
+  };
 
   const accent = gameAccent[game] || "#7c3aed";
 
@@ -39,10 +56,17 @@ const CreateLobby = () => {
     return Object.keys(newErrors).length === 0;
   };
 
-  const handleCreate = () => {
-    if (validate()) {
-      console.log("Create lobby:", { title, description, game, maxMembers });
+  const handleCreate = async () => {
+    if (!validate()) return;
+    setApiError(null);
+    setLoading(true);
+    try {
+      await createLobby({ name: title, description, game, max_members: maxMembers, image: imageFile ?? undefined });
       navigate("/lobbies");
+    } catch (err) {
+      setApiError(err instanceof Error ? err.message : "Error al crear lobby");
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -87,6 +111,36 @@ const CreateLobby = () => {
               {errors.description && <p className="text-xs mt-1" style={{ color: '#f87171' }}>{errors.description}</p>}
             </div>
 
+            {/* Imagen del lobby */}
+            <div>
+              <label className="text-xs font-bold uppercase tracking-widest mb-2 block" style={{ color: '#6b7280', fontFamily: 'Orbitron, sans-serif' }}>Imagen del Lobby <span style={{ color: '#4b5563' }}>(opcional)</span></label>
+              <label
+                className="flex flex-col items-center justify-center w-full rounded-xl cursor-pointer transition-all overflow-hidden"
+                style={{
+                  border: `1px dashed ${imagePreview ? accent : 'rgba(255,255,255,0.12)'}`,
+                  background: imagePreview ? 'transparent' : 'rgba(255,255,255,0.02)',
+                  minHeight: imagePreview ? 'auto' : '80px',
+                }}
+              >
+                {imagePreview ? (
+                  <div className="relative w-full">
+                    <img src={imagePreview} alt="preview" className="w-full object-cover rounded-xl" style={{ maxHeight: '160px' }} />
+                    <div className="absolute inset-0 flex items-center justify-center rounded-xl opacity-0 hover:opacity-100 transition-all" style={{ background: 'rgba(0,0,0,0.5)' }}>
+                      <p className="text-xs font-bold text-white">Cambiar imagen</p>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex flex-col items-center gap-2 py-5">
+                    <svg width="24" height="24" fill="none" viewBox="0 0 24 24" stroke="currentColor" style={{ color: '#4b5563' }}>
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                    </svg>
+                    <p className="text-xs" style={{ color: '#4b5563' }}>Click para subir imagen</p>
+                  </div>
+                )}
+                <input type="file" accept="image/*" className="hidden" onChange={handleImageChange} />
+              </label>
+            </div>
+
             <div>
               <label className="text-xs font-bold uppercase tracking-widest mb-2 block" style={{ color: '#6b7280', fontFamily: 'Orbitron, sans-serif' }}>
                 Máximo de miembros: <span style={{ color: accent }}>{maxMembers}</span>
@@ -102,8 +156,11 @@ const CreateLobby = () => {
               </div>
             </div>
 
-            <button onClick={handleCreate} className="w-full py-3 rounded-xl font-bold text-sm tracking-widest uppercase transition-all" style={{ background: `linear-gradient(135deg, ${accent}cc, #7c3aed)`, boxShadow: `0 0 20px ${accent}44`, fontFamily: 'Orbitron, sans-serif' }}>
-              Crear Lobby
+            {apiError && (
+              <p className="text-pink-400 text-xs text-center py-2 px-3 rounded-lg bg-pink-500/10 border border-pink-500/20">{apiError}</p>
+            )}
+            <button onClick={handleCreate} disabled={loading} className="w-full py-3 rounded-xl font-bold text-sm tracking-widest uppercase transition-all disabled:opacity-50 disabled:cursor-not-allowed" style={{ background: `linear-gradient(135deg, ${accent}cc, #7c3aed)`, boxShadow: `0 0 20px ${accent}44`, fontFamily: 'Orbitron, sans-serif' }}>
+              {loading ? "Creando..." : "Crear Lobby"}
             </button>
           </div>
         </div>
